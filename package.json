@@ -1,0 +1,16 @@
+{
+  "name": "tiny-react",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "build": "babel example/main.js --out-file example/main_dist.js"
+  },
+  "repository": "git@github.com:peakchen90/tiny-react.git",
+  "author": "peakchen90 <1558267774@qq.com>",
+  "license": "MIT",
+  "devDependencies": {
+    "@babel/cli": "^7.12.10",
+    "@babel/core": "^7.12.10",
+    "@babel/plugin-transform-react-jsx": "^7.12.12"
+  }
+}
