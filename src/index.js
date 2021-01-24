@@ -34,7 +34,7 @@ function createTextElement(text) {
 function createDom(fiber) {
   const dom = fiber.type === 'TEXT_ELEMENT'
     ? document.createTextNode('')
-    : document.createElement(filber.type)
+    : document.createElement(fiber.type)
 
   updateDom(dom, {}, fiber.props)
 
@@ -51,6 +51,9 @@ function getEventType(prop) {
 
 function updateDom(dom, prevProps, nextProps) {
   Object.keys(prevProps).forEach(prop => {
+    if (prop === 'children') {
+      return
+    }
     if (isEventProp(prop) && (!(prop in nextProps) || prevProps[prop] !== nextProps[prop])) { // remove event
       const eventType = getEventType(prop)
       dom.removeEventListener(eventType, prevProps[prop])
@@ -58,17 +61,20 @@ function updateDom(dom, prevProps, nextProps) {
     if (!(prop in nextProps)) { // remove property
       dom.removeAttribute(prop)
     } else if (prevProps[prop] !== nextProps[prop]) { // update property
-      dom.setAttribute(prop, nextProps[prop])
+      dom[prop] = nextProps[prop]
     }
   })
 
   Object.keys(nextProps).forEach(prop => {
+    if (prop === 'children') {
+      return
+    }
     if (prevProps[prop] !== nextProps[prop]) { // update property
       if (isEventProp(prop)) { // add event
         const eventType = getEventType(prop)
         dom.addEventListener(eventType, nextProps[prop])
       } else {
-        dom.setAttribute(prop, nextProps[prop])
+        dom[prop] = nextProps[prop]
       }
     }
   })
@@ -81,13 +87,17 @@ function commitRoot() {
   wipRoot = null;
 }
 
+/**
+ * commit阶段，更新dom，还是按照 fiber -> 第一个子节点 -> 子节点的右侧兄弟节点 顺序深度优先遍历
+ * @param fiber
+ */
 function commitWork(fiber) {
   if (!fiber) {
     return
   }
 
   let domParentFiber = fiber.parent;
-  while (!domParentFiber) {
+  while (!domParentFiber.dom) {
     domParentFiber = domParentFiber.parent;
   }
   const domParent = domParentFiber.dom;
@@ -101,7 +111,7 @@ function commitWork(fiber) {
   }
 
   commitWork(fiber.child)
-  commitWork(fiber.subling)
+  commitWork(fiber.sibling)
 }
 
 function commitDeletion(fiber, domParent) {
@@ -129,9 +139,14 @@ function updateHostComponent(fiber) {
   reconcileChildren(fiber, fiber.props.children)
 }
 
-function reconcileChildren(fiber, children) {
+/**
+ * 调和子节点
+ * @param wipFiber
+ * @param children
+ */
+function reconcileChildren(wipFiber, children) {
   let index = 0;
-  let oldFiber = wipFiber && wipFiber.alternate && wipFiber.alternate.child
+  let oldFiber = wipFiber.alternate && wipFiber.alternate.child
   let prevSibling = null;
 
   while (index < children.length || oldFiber != null) {
@@ -168,12 +183,12 @@ function reconcileChildren(fiber, children) {
       oldFiber = oldFiber.sibling;
     }
     if (index === 0) {
-      wipFiber.child = newFiber
+      wipFiber.child = newFiber // 将第一个子节点绑定到 fiber.child
     } else {
-      prevSibling.sibing = newFiber
+      prevSibling.sibling = newFiber // 将第二个及后面的接口，依次绑定到前一个的 fiber.sibling 上，上一个就可以通过 fiber.sibling 访问下一个节点
     }
 
-    prevSibling = newFiber
+    prevSibling = newFiber // 保存上一个新节点的引用
     index++
   }
 }
@@ -190,6 +205,11 @@ function render(element, container) {
   nextUnitOfWork = wipRoot;
 }
 
+/**
+ * 执行单元任务，并返回下一个待执行的任务
+ * @param fiber
+ * @return {null|*}
+ */
 function performUnitOfWork(fiber) {
   const isFunctionComponent = fiber.type instanceof Function;
   if (isFunctionComponent) {
@@ -198,6 +218,9 @@ function performUnitOfWork(fiber) {
     updateHostComponent(fiber)
   }
 
+  // 1. 深度优先遍历，优先遍历 fiber.child
+  // 2. 如果找不到 fiber.child，则查找右侧兄弟节点，如果兄弟节点找不到，则递归往上查找父节点的兄弟节点
+  // 3. 遍历到父节点的兄弟节点后，如果该节点有 fiber.child，则还是会继续遍历 fiber.child, 重复第 1 步
   if (fiber.child) {
     return fiber.child
   }
@@ -211,6 +234,7 @@ function performUnitOfWork(fiber) {
 }
 
 function workLoop(deadline) {
+  console.log('workLoop:', Date.now())
   let shouldYield = false;
   while (nextUnitOfWork && !shouldYield) {
     nextUnitOfWork = performUnitOfWork(nextUnitOfWork)
@@ -224,12 +248,23 @@ function workLoop(deadline) {
   requestIdleCallback(workLoop)
 }
 
+requestIdleCallback(workLoop)
+
 function useState(initial) {
   const oldHook = wipFiber.alternate && wipFiber.alternate.hooks && wipFiber.alternate.hooks[hookIndex]
   const hook = {
     state: oldHook ? oldHook.state : initial,
     queue: []
   }
+
+  const actions = oldHook ? oldHook.queue : [];
+  actions.forEach(action => {
+    if (typeof action === 'function') {
+      hook.state = action(hook.state)
+    } else {
+      hook.state = action;
+    }
+  })
 
   const setState = action => {
     hook.queue.push(action)
@@ -246,8 +281,6 @@ function useState(initial) {
   hookIndex++;
   return [hook.state, setState]
 }
-
-requestIdleCallback(workLoop)
 
 const TinyReact = {
   createElement,
