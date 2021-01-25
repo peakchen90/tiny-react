@@ -1,6 +1,7 @@
 import TinyReact from "../src";
 const {
   useState,
+  useEffect,
   render,
   Component
 } = TinyReact;
@@ -11,6 +12,14 @@ class Comp1 extends Component {
     this.state = {
       data: ''
     };
+  }
+
+  componentDidMount() {
+    console.log('Comp1 组件挂载完成');
+  }
+
+  componentDidUpdate(prevProps, prevState) {
+    console.log('Comp1 组件更新完成:', prevProps, prevState);
   }
 
   render() {
@@ -31,6 +40,15 @@ class Comp1 extends Component {
 
 function App() {
   const [count, setCount] = useState(0);
+  useEffect(() => {
+    console.log('App 第一次挂载完成');
+  }, []);
+  useEffect(() => {
+    console.log('App 更新完成');
+  });
+  useEffect(() => {
+    console.log('count 更新:', count);
+  }, [count]);
   return TinyReact.createElement("div", null, TinyReact.createElement("div", {
     style: "margin: 20px;"
   }, TinyReact.createElement("button", {

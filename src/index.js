@@ -127,6 +127,35 @@ function commitWork(fiber) {
   // 递归遍历子节点或兄弟节点
   commitWork(fiber.child)
   commitWork(fiber.sibling)
+
+  // 应用 effect hooks
+  if (fiber.hooks) {
+    const oldHooks = (fiber.alternate && fiber.alternate.hooks) || []
+    fiber.hooks.forEach((item, index) => {
+      if (item.type !== 'effect') return;
+      if (!fiber.alternate) { // 初次渲染，直接执行effect回调
+        item.callback()
+      } else { // 更新时，控制执行effect回调
+        const oldDeps = (oldHooks[index] && oldHooks[index].deps) || [];
+        if (!item.deps || item.deps.some((dep, i) => dep !== oldDeps[i])) {
+          item.callback()
+        }
+      }
+    })
+  } else if (fiber.componentInstance) {
+    if (!fiber.alternate) {
+      if (fiber.componentInstance.componentDidMount) {
+        fiber.componentInstance.componentDidMount()
+      }
+    } else {
+      if (fiber.componentInstance.componentDidUpdate) {
+        fiber.componentInstance.componentDidUpdate(
+          fiber.alternate.componentInstance.props,
+          fiber.alternate.componentInstance.state
+        )
+      }
+    }
+  }
 }
 
 function commitDeletion(fiber, domParent) {
@@ -142,8 +171,7 @@ function Component(props) {
 }
 
 Component.prototype.setState = function (state) {
-  const newState = Object.assign(this.state, state)
-  this.state = newState;
+  this.state = Object.assign(this.state || {}, state)
   wipRoot = {
     dom: currentRoot.dom,
     props: currentRoot.props,
@@ -286,7 +314,7 @@ function performUnitOfWork(fiber) {
 }
 
 function workLoop(deadline) {
-  console.log('workLoop:', Date.now())
+  // console.log('workLoop:', Date.now())
   let shouldYield = false;
   while (nextUnitOfWork && !shouldYield) {
     nextUnitOfWork = performUnitOfWork(nextUnitOfWork)
@@ -348,10 +376,24 @@ function useState(initial) {
   return [hook.state, setState]
 }
 
+function useEffect(callback, deps) {
+  // 获取当前指针指向的 hook 信息，初次渲染为 undefined
+  // const oldHook = wipFiber.alternate && wipFiber.alternate.hooks && wipFiber.alternate.hooks[hookIndex]
+  const hook = {
+    type: 'effect',
+    callback,
+    deps
+  }
+
+  wipFiber.hooks.push(hook);
+  hookIndex++;
+}
+
 const TinyReact = {
   createElement,
   render,
   useState,
+  useEffect,
   Component
 }
 
