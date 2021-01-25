@@ -31,6 +31,11 @@ function createTextElement(text) {
   }
 }
 
+/**
+ * 创建dom
+ * @param fiber
+ * @return {Text|*}
+ */
 function createDom(fiber) {
   const dom = fiber.type === 'TEXT_ELEMENT'
     ? document.createTextNode('')
@@ -49,6 +54,12 @@ function getEventType(prop) {
   return prop.slice(2, 3).toLowerCase() + prop.slice(3)
 }
 
+/**
+ * 更新dom
+ * @param dom
+ * @param prevProps
+ * @param nextProps
+ */
 function updateDom(dom, prevProps, nextProps) {
   Object.keys(prevProps).forEach(prop => {
     if (prop === 'children') {
@@ -80,6 +91,9 @@ function updateDom(dom, prevProps, nextProps) {
   })
 }
 
+/**
+ * commit根节点(同步执行，不能打断)，执行完成清空wip标志，并记录当前已更新的fiber根节点 currentRoot
+ */
 function commitRoot() {
   deletions.forEach(commitWork)
   commitWork(wipRoot.child)
@@ -110,6 +124,7 @@ function commitWork(fiber) {
     commitDeletion(fiber, domParent)
   }
 
+  // 递归遍历子节点或兄弟节点
   commitWork(fiber.child)
   commitWork(fiber.sibling)
 }
@@ -122,16 +137,24 @@ function commitDeletion(fiber, domParent) {
   }
 }
 
+/**
+ * 更新 FC 组件
+ * @param fiber
+ */
 function updateFunctionComponent(fiber) {
   wipFiber = fiber;
-  hookIndex = 0;
+  hookIndex = 0; // 每次更新FC，会重置 hookIndex，并清空 hooks
   wipFiber.hooks = [];
   const children = [
-    fiber.type(fiber.props)
+    fiber.type(fiber.props) // 渲染FC组件，作为 children
   ]
   reconcileChildren(fiber, children)
 }
 
+/**
+ * 更新原生 HOST 组件
+ * @param fiber
+ */
 function updateHostComponent(fiber) {
   if (!fiber.dom) {
     fiber.dom = createDom(fiber)
@@ -203,6 +226,7 @@ function render(element, container) {
   }
   deletions = [];
   nextUnitOfWork = wipRoot;
+  requestIdleCallback(workLoop)
 }
 
 /**
@@ -241,20 +265,20 @@ function workLoop(deadline) {
     shouldYield = deadline.timeRemaining() < 1
   }
 
-  if (!nextUnitOfWork && wipRoot) {
+  if (!nextUnitOfWork && wipRoot) { // 没有进行中的调和任务，且没有commit过时，批量commit更新（同步操作，不可打断）
     commitRoot()
   }
-
-  requestIdleCallback(workLoop)
+  if (nextUnitOfWork || wipRoot) {
+    requestIdleCallback(workLoop)
+  }
 }
 
-requestIdleCallback(workLoop)
-
 function useState(initial) {
+  // 获取当前指针指向的 hook 信息，初次渲染为 undefined
   const oldHook = wipFiber.alternate && wipFiber.alternate.hooks && wipFiber.alternate.hooks[hookIndex]
   const hook = {
     state: oldHook ? oldHook.state : initial,
-    queue: []
+    queue: [] // 可能会多次执行 setState，保存以便于更新每次执行结果
   }
 
   const actions = oldHook ? oldHook.queue : [];
@@ -273,8 +297,9 @@ function useState(initial) {
       props: currentRoot.props,
       alternate: currentRoot
     }
-    nextUnitOfWork = wipRoot;
+    nextUnitOfWork = wipRoot; // 修改全局变量 nextUnitOfWork 触发更新，有一个全局不断递归的 workLoop 方法会检查（正式版 react 是这样触发更新？）
     deletions = []
+    requestIdleCallback(workLoop)
   }
 
   wipFiber.hooks.push(hook);
