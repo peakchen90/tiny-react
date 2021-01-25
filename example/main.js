@@ -1,10 +1,32 @@
 import TinyReact from "../src";
 
-const {useState, render} = TinyReact;
+const {useState, render, Component} = TinyReact;
+
+class Comp1 extends Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      data: ''
+    }
+  }
+
+  render() {
+    return (
+      <div style="margin: 40px 20px;">
+        <input type="text" value={this.state.data} onInput={(e) => {
+          this.setState({
+            data: e.target.value
+          })
+        }}/>
+        <p>{this.props.label}: {this.state.data}</p>
+      </div>
+    );
+  }
+}
+
 
 function App() {
   const [count, setCount] = useState(0)
-  const [val, setVal] = useState('')
 
   return (
     <div>
@@ -12,12 +34,7 @@ function App() {
         <button onClick={() => setCount(count + 1)}>ADD</button>
         <span style="margin-left: 10px;">count: {count}</span>
       </div>
-      <div style="margin: 40px 20px;">
-        <input type="text" value={val} onInput={(e) => {
-          setVal(e.target.value)
-        }}/>
-        <p>input value: {val}</p>
-      </div>
+      <Comp1 label="Input"/>
     </div>
   )
 }

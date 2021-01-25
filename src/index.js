@@ -137,6 +137,37 @@ function commitDeletion(fiber, domParent) {
   }
 }
 
+function Component(props) {
+  this.props = props || {}
+}
+
+Component.prototype.setState = function (state) {
+  const newState = Object.assign(this.state, state)
+  this.state = newState;
+  wipRoot = {
+    dom: currentRoot.dom,
+    props: currentRoot.props,
+    alternate: currentRoot
+  }
+  nextUnitOfWork = wipRoot;
+  deletions = []
+  requestIdleCallback(workLoop)
+}
+
+/**
+ * 更新 class 组件
+ * @param fiber
+ */
+function updateClassComponent(fiber) {
+  wipFiber = fiber;
+  wipFiber.componentInstance = wipFiber.componentInstance || new fiber.type(fiber.props)
+  const children = [
+    wipFiber.componentInstance.render()
+  ]
+  reconcileChildren(fiber, children)
+}
+
+
 /**
  * 更新 FC 组件
  * @param fiber
@@ -176,11 +207,12 @@ function reconcileChildren(wipFiber, children) {
     const element = children[index]
     let newFiber = null;
     const sameType = oldFiber && element && element.type === oldFiber.type;
-    if (sameType) {
+    if (sameType) { // 与 oldFiber 类型相同，直接复用 oldFiber 的dom节点，并标记"UPDATE"，以便于在 commit 阶段更新dom
       newFiber = {
         type: oldFiber.type,
         props: element.props,
         dom: oldFiber.dom,
+        componentInstance: oldFiber.componentInstance,
         parent: wipFiber,
         alternate: oldFiber,
         effectTag: 'UPDATE'
@@ -202,6 +234,7 @@ function reconcileChildren(wipFiber, children) {
       }
     }
 
+    // 更新 oldFiber 指向的位置，与正在遍历的新的 fiber 节点对应
     if (oldFiber) {
       oldFiber = oldFiber.sibling;
     }
@@ -216,19 +249,6 @@ function reconcileChildren(wipFiber, children) {
   }
 }
 
-function render(element, container) {
-  wipRoot = {
-    dom: container,
-    props: {
-      children: [element]
-    },
-    alternate: currentRoot
-  }
-  deletions = [];
-  nextUnitOfWork = wipRoot;
-  requestIdleCallback(workLoop)
-}
-
 /**
  * 执行单元任务，并返回下一个待执行的任务
  * @param fiber
@@ -237,7 +257,15 @@ function render(element, container) {
 function performUnitOfWork(fiber) {
   const isFunctionComponent = fiber.type instanceof Function;
   if (isFunctionComponent) {
-    updateFunctionComponent(fiber)
+    let current = fiber.type.prototype;
+    while (current != null && !(current instanceof Component)) {
+      current = current.prototype;
+    }
+    if (current) {
+      updateClassComponent(fiber)
+    } else {
+      updateFunctionComponent(fiber)
+    }
   } else {
     updateHostComponent(fiber)
   }
@@ -271,6 +299,19 @@ function workLoop(deadline) {
   if (nextUnitOfWork || wipRoot) {
     requestIdleCallback(workLoop)
   }
+}
+
+function render(element, container) {
+  wipRoot = {
+    dom: container,
+    props: {
+      children: [element]
+    },
+    alternate: currentRoot
+  }
+  deletions = [];
+  nextUnitOfWork = wipRoot;
+  requestIdleCallback(workLoop)
 }
 
 function useState(initial) {
@@ -310,7 +351,8 @@ function useState(initial) {
 const TinyReact = {
   createElement,
   render,
-  useState
+  useState,
+  Component
 }
 
 export default TinyReact;
