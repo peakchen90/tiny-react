@@ -1,4 +1,4 @@
-import TinyReact from "../src";
+import TinyReact from "../src/index.js";
 
 const {useState, useEffect, render, Component} = TinyReact;
 
